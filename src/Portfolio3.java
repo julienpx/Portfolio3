@@ -26,13 +26,9 @@ public class Portfolio3 {
         // Call countConnectedComponents() on the MatrixGraph instance
         g.countConnectedComponents();
 
-        // Find and print groups of subject modules with no overlapping students
-        List<Set<Vertex>> groups = g.findNonOverlappingGroups();
-        System.out.println("Non-overlapping groups:");
-        for (int i = 0; i < groups.size(); i++) {
-            System.out.println("Group " + (i + 1) + ": " + groups.get(i));
-        }
+        g.printNonOverlappingGroups();
     }
+
         static Set<Edge> minimumSpanningTree(Graph g){
             Collection<Edge> edges=g.edges();
             HashSet<Edge> mst=new HashSet<>();
@@ -108,21 +104,7 @@ class Edge{
     public String toString(){return from.name+" - "+weight+" -> "+to.name; }
 }
 
-class EdgeGraph extends Graph{
-    HashSet<Edge> edges=new HashSet<>();
-    void insertEdge(String u,String v,int w){
-        edges.add(new Edge(vertex(u),vertex(v),w));
-    }
-    void printGraph() {
-        for(Edge e:edges) System.out.println(e);
-    }
-    Collection<Edge> edges(){return edges;}
-    Collection<Edge> outEdge(Vertex v){
-        ArrayList<Edge> outEdge=new ArrayList<>();
-        for(Edge e:edges)if(e.from==v)outEdge.add(e);
-        return outEdge;
-    }
-}
+
 
 class MatrixGraph extends Graph {
     private ArrayList<ArrayList<Integer>> matrix = new ArrayList<>();
@@ -142,42 +124,6 @@ class MatrixGraph extends Graph {
         setMatrix(vertexIndex.get(u1), vertexIndex.get(v1), w);
     }
 
-    List<Set<Vertex>> findNonOverlappingGroups() {
-        int n = vertexList.size();
-
-        // Initialize inverse graph with no edges
-        ArrayList<ArrayList<Integer>> inverseMatrix = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            inverseMatrix.add(new ArrayList<>(Collections.nCopies(n, 0)));
-        }
-
-        // Add edges in the inverse graph only where there is no student overlap in the original graph
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-                if (i != j) {
-                    Integer weight = (i < matrix.size() && j < matrix.get(i).size()) ? matrix.get(i).get(j) : null;
-                    if (weight == null || weight == 0) { // No students combine these modules
-                        inverseMatrix.get(i).set(j, 1);
-                    }
-                }
-            }
-        }
-
-        // Find connected components in the inverse graph
-        List<Set<Vertex>> groups = new ArrayList<>();
-        HashSet<Vertex> visited = new HashSet<>();
-
-        for (int i = 0; i < n; i++) {
-            Vertex v = vertexList.get(i);
-            if (!visited.contains(v)) {
-                Set<Vertex> group = new HashSet<>();
-                visitDepthFirstInverse(v, i, group, visited, inverseMatrix);
-                groups.add(group);
-            }
-        }
-
-        return groups;
-    }
 
     void printGraph() {
         // Set a fixed column width for the name column based on the longest name length
@@ -239,13 +185,26 @@ class MatrixGraph extends Graph {
 
 
     private void setMatrix(int i, int j, int w) {
-        // Expand matrix to have enough rows
-        while (matrix.size() <= i) matrix.add(new ArrayList<>());
+        // Ensure the matrix has enough rows for index `i`
+        while (matrix.size() <= i) {
+            matrix.add(new ArrayList<>(Collections.nCopies(matrix.size(), null)));
+        }
 
-        // Ensure each row has enough columns by adding `null` for uninitialized positions
-        ArrayList<Integer> row = matrix.get(i);
-        while (row.size() <= j) row.add(null);
-        row.set(j, w);
+        // Ensure the matrix has enough rows for index `j`
+        while (matrix.size() <= j) {
+            matrix.add(new ArrayList<>(Collections.nCopies(matrix.size(), null)));
+        }
+
+        // Expand each row to the current matrix size, to ensure each row has enough columns
+        for (ArrayList<Integer> row : matrix) {
+            while (row.size() < matrix.size()) {
+                row.add(null);
+            }
+        }
+
+        // Set the weight for both directions (assuming an undirected graph)
+        matrix.get(i).set(j, w);
+        matrix.get(j).set(i, w);  // Ensure symmetry in the matrix
     }
 
 
@@ -269,15 +228,55 @@ class MatrixGraph extends Graph {
         return components;
     }
 
-    private void visitDepthFirstInverse(Vertex v, int index, Set<Vertex> group, Set<Vertex> visited, ArrayList<ArrayList<Integer>> inverseMatrix) {
-        if (visited.contains(v)) return;
-        visited.add(v);
-        group.add(v);
+    void printNonOverlappingGroups() {
+        HashSet<Vertex> visited = new HashSet<>();
+        int groupCount = 1;
 
-        for (int j = 0; j < vertexList.size(); j++) {
-            if (inverseMatrix.get(index).get(j) == 1 && !visited.contains(vertexList.get(j))) {
-                visitDepthFirstInverse(vertexList.get(j), j, group, visited, inverseMatrix);
+        for (Vertex data : vertices()) {
+            if (visited.contains(data)) continue;
+
+            // Initialize the group with the starting vertex
+            HashSet<Vertex> group = new HashSet<>();
+            group.add(data);
+
+            // Find potential group members with no student overlap
+            for (Vertex potential : vertices()) {
+                if (group.contains(potential) || visited.contains(potential)) continue;
+
+                boolean canBeAdded = true;
+                for (Vertex member : group) {
+                    if (getWeight(this, member, potential) != 0) { // Check if there's student overlap
+                        canBeAdded = false;
+                        break;
+                    }
+                }
+
+                if (canBeAdded) group.add(potential);
+            }
+
+            // Mark all vertices in this group as visited
+            visited.addAll(group);
+
+            // Print the group with its number
+            System.out.println("Group " + groupCount + ": " + group);
+            groupCount++;
+        }
+    }
+
+    static int getWeight(Graph g, Vertex v, Vertex w) {
+        for(Edge e:g.outEdge(v))
+            if(e.to == w) return e.weight;
+        return 0;
+    }
+
+    boolean isValidGroup(Set<Vertex> group) {
+        for (Vertex v1 : group) {
+            for (Vertex v2 : group) {
+                if (v1 != v2 && getWeight(this, v1, v2) != 0) {
+                    return false; // Overlap found, group is not valid
+                }
             }
         }
+        return true; // No overlap found, group is valid
     }
 }
