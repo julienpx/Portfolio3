@@ -14,8 +14,7 @@ public class Portfolio3 {
             g.insertEdge(a[1].trim(), a[0].trim(), Integer.parseInt(a[2].trim()));
         }
 
-        //Set<Edge> mst = minimumSpanningTree(g);
-        //System.out.println(mst);
+
 
         // Print the graph structure
         g.printGraph();
@@ -27,6 +26,9 @@ public class Portfolio3 {
         g.countConnectedComponents();
 
         g.printNonOverlappingGroups();
+
+        // Calculate and display the timeslot order based on minimizing consecutive student conflicts
+        g.calculateTimeslotOrder();
     }
 
         static Set<Edge> minimumSpanningTree(Graph g){
@@ -228,8 +230,9 @@ class MatrixGraph extends Graph {
         return components;
     }
 
-    void printNonOverlappingGroups() {
+    List<Set<Vertex>> printNonOverlappingGroups() {
         HashSet<Vertex> visited = new HashSet<>();
+        List<Set<Vertex>> groups = new ArrayList<>();
         int groupCount = 1;
 
         for (Vertex data : vertices()) {
@@ -256,11 +259,13 @@ class MatrixGraph extends Graph {
 
             // Mark all vertices in this group as visited
             visited.addAll(group);
+            groups.add(group);
 
             // Print the group with its number
             System.out.println("Group " + groupCount + ": " + group);
             groupCount++;
         }
+        return groups;
     }
 
     static int getWeight(Graph g, Vertex v, Vertex w) {
@@ -269,14 +274,92 @@ class MatrixGraph extends Graph {
         return 0;
     }
 
-    boolean isValidGroup(Set<Vertex> group) {
-        for (Vertex v1 : group) {
-            for (Vertex v2 : group) {
-                if (v1 != v2 && getWeight(this, v1, v2) != 0) {
-                    return false; // Overlap found, group is not valid
+    void calculateTimeslotOrder() {
+        List<Set<Vertex>> groups = printNonOverlappingGroups();
+        int n = groups.size();
+
+        // Create the group graph with weights based on combined student counts
+        int[][] groupGraph = new int[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                int weight = calculateGroupWeight(groups.get(i), groups.get(j));
+                groupGraph[i][j] = weight;
+                groupGraph[j][i] = weight;
+            }
+        }
+
+        int bestConsecutiveStudents = Integer.MAX_VALUE;
+        List<Integer> bestOrder = new ArrayList<>();
+
+        // Try starting from each vertex to find the best ordering
+        for (int start = 0; start < n; start++) {
+            boolean[] visited = new boolean[n];
+            List<Integer> order = new ArrayList<>();
+            int current = start;
+            visited[current] = true;
+            order.add(current);
+
+            while (order.size() < n) {
+                int nearest = -1;
+                int minWeight = Integer.MAX_VALUE;
+
+                for (int i = 0; i < n; i++) {
+                    if (!visited[i] && groupGraph[current][i] < minWeight) {
+                        nearest = i;
+                        minWeight = groupGraph[current][i];
+                    }
+                }
+
+                if (nearest != -1) {
+                    visited[nearest] = true;
+                    order.add(nearest);
+                    current = nearest;
+                }
+            }
+
+            // Calculate consecutive students for this ordering
+            int consecutiveStudents = 0;
+            for (int i = 0; i < order.size() - 1; i++) {
+                int groupA = order.get(i);
+                int groupB = order.get(i + 1);
+                consecutiveStudents += groupGraph[groupA][groupB];
+            }
+
+            // Keep track of the best ordering found
+            if (consecutiveStudents < bestConsecutiveStudents) {
+                bestConsecutiveStudents = consecutiveStudents;
+                bestOrder = new ArrayList<>(order);
+            }
+        }
+
+        int totalStudents = calculateTotalStudents();
+        System.out.println("Best timeslot order: " + bestOrder);
+        System.out.println("Students with consecutive timeslots: " + bestConsecutiveStudents + " / " + totalStudents);
+    }
+
+
+    // Helper function to calculate the weight between two groups
+    int calculateGroupWeight(Set<Vertex> group1, Set<Vertex> group2) {
+        int weight = 0;
+        for (Vertex v1 : group1) {
+            for (Vertex v2 : group2) {
+                weight += getWeight(this, v1, v2);
+            }
+        }
+        return weight;
+    }
+
+    // Helper function to calculate the total number of students in the graph
+    int calculateTotalStudents() {
+        int total = 0;
+        for (ArrayList<Integer> row : matrix) {
+            for (Integer weight : row) {
+                if (weight != null) {
+                    total += weight;
                 }
             }
         }
-        return true; // No overlap found, group is valid
+        return total / 2; // Divide by 2 since each edge is counted twice in an undirected graph
     }
+
 }
